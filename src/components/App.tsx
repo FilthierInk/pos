@@ -31,4 +31,4 @@ export default function App() {
       <SaleScreen />
     </div>
   )
-}Add-Content .gitignore ".env" -Encoding utf8
+}
