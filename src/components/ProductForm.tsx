@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 
-export default function ProductForm() {
+export default function ProductForm({ onCreated }: { onCreated: () => void }) {
   const [sku, setSku] = useState('')
   const [satCode, setSatCode] = useState('')
   const [description, setDescription] = useState('')
@@ -34,52 +34,46 @@ export default function ProductForm() {
       setSatCode('')
       setDescription('')
       setPrice('')
+      onCreated()
     }
   }
 
   return (
-    <div className="max-w-md mx-auto p-4">
-      <h2 className="font-bold mb-3">New product</h2>
-      <form onSubmit={handleSubmit} className="bg-white p-4 rounded shadow space-y-3">
-        <input
-          className="border rounded w-full p-2"
-          placeholder="SKU"
-          value={sku}
-          onChange={(e) => setSku(e.target.value)}
-          required
-        />
-        <input
-          className="border rounded w-full p-2"
-          placeholder="SAT code"
-          value={satCode}
-          onChange={(e) => setSatCode(e.target.value)}
-          required
-        />
-        <input
-          className="border rounded w-full p-2"
-          placeholder="Description"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          required
-        />
+    <form onSubmit={handleSubmit} className="card space-y-4">
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="label">SKU</label>
+          <input className="input" value={sku} onChange={(e) => setSku(e.target.value)} required />
+        </div>
+        <div>
+          <label className="label">SAT code</label>
+          <input className="input" value={satCode} onChange={(e) => setSatCode(e.target.value)} required />
+        </div>
+      </div>
+      <div>
+        <label className="label">Description</label>
+        <input className="input" value={description} onChange={(e) => setDescription(e.target.value)} required />
+      </div>
+      <div>
+        <label className="label">Suggested price</label>
         <input
           type="number"
           min={0}
           step="0.01"
-          className="border rounded w-full p-2"
-          placeholder="Suggested price"
+          className="input"
           value={price}
           onChange={(e) => setPrice(e.target.value)}
           required
         />
-        <button
-          disabled={saving}
-          className="bg-blue-600 text-white rounded w-full p-2 disabled:opacity-50"
-        >
-          {saving ? 'Saving...' : 'Create product'}
-        </button>
-        {message && <p className="text-sm">{message}</p>}
-      </form>
-    </div>
+      </div>
+      <button disabled={saving} className="btn-primary w-full">
+        {saving ? 'Saving...' : 'Create product'}
+      </button>
+      {message && (
+        <p className={`text-sm ${message.startsWith('Error') ? 'text-red-600' : 'text-green-700'}`}>
+          {message}
+        </p>
+      )}
+    </form>
   )
 }

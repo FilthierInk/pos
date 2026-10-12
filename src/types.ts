@@ -4,9 +4,20 @@ export type Product = {
   sat_code: string
   description: string
   suggested_price: number
+  sat_unit_key: string
+  iva_rate: number
 }
 
-export type Client = { uuid: string; name: string }
+export type Client = {
+  uuid: string
+  name: string
+  company: {
+    legal_name: string
+    fiscal_zip: string
+    tax_regime: string
+    cfdi_use: string
+  } | null
+}
 
 export type CartItem = {
   product: Product

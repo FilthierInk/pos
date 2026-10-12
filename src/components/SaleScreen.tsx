@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
+import { Search, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { CFDI_USES, REGIMES } from '../catalogs'
 import {
   PAYMENT_METHODS,
   type CartItem,
@@ -18,22 +20,27 @@ export default function SaleScreen() {
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
 
-  // Load active clients; default to Walk-in
+  // Fiscal override for this sale only
+  const [override, setOverride] = useState(false)
+  const [fLegal, setFLegal] = useState('')
+  const [fZip, setFZip] = useState('')
+  const [fRegime, setFRegime] = useState('')
+  const [fCfdi, setFCfdi] = useState('')
+
   useEffect(() => {
     supabase
       .from('client')
-      .select('uuid, name')
+      .select('uuid, name, company:company_uuid(legal_name, fiscal_zip, tax_regime, cfdi_use)')
       .eq('is_active', true)
       .order('name')
       .then(({ data }) => {
-        const list = (data ?? []) as Client[]
+        const list = (data ?? []) as unknown as Client[]
         setClients(list)
         const walkIn = list.find((c) => c.name === 'Walk-in')
         setClientUuid(walkIn?.uuid ?? list[0]?.uuid ?? '')
       })
   }, [])
 
-  // Debounced product search
   useEffect(() => {
     const q = query.replace(/[%,()]/g, '').trim()
     if (q.length < 2) {
@@ -43,7 +50,7 @@ export default function SaleScreen() {
     const t = setTimeout(async () => {
       const { data } = await supabase
         .from('inventory')
-        .select('uuid, sku, sat_code, description, suggested_price')
+        .select('uuid, sku, sat_code, description, suggested_price, sat_unit_key, iva_rate')
         .eq('is_active', true)
         .or(`sku.ilike.%${q}%,description.ilike.%${q}%`)
         .limit(20)
@@ -51,6 +58,24 @@ export default function SaleScreen() {
     }, 300)
     return () => clearTimeout(t)
   }, [query])
+
+  function fillFromClient(uuid: string) {
+    const c = clients.find((x) => x.uuid === uuid)?.company
+    setFLegal(c?.legal_name ?? '')
+    setFZip(c?.fiscal_zip ?? '')
+    setFRegime(c?.tax_regime ?? '')
+    setFCfdi(c?.cfdi_use ?? '')
+  }
+
+  function selectClient(uuid: string) {
+    setClientUuid(uuid)
+    setOverride(false)
+  }
+
+  function toggleOverride(on: boolean) {
+    setOverride(on)
+    if (on) fillFromClient(clientUuid)
+  }
 
   function addToCart(product: Product) {
     setCart((prev) => {
@@ -79,6 +104,12 @@ export default function SaleScreen() {
 
   async function saveSale() {
     if (cart.length === 0 || !clientUuid) return
+
+    if (override && fZip.trim() && !/^[0-9]{5}$/.test(fZip.trim())) {
+      setMessage('Error: postal code must be 5 digits')
+      return
+    }
+
     setSaving(true)
     setMessage('')
     const { error } = await supabase.rpc('create_sale', {
@@ -89,6 +120,10 @@ export default function SaleScreen() {
         unit_price: i.unit_price,
         quantity: i.quantity,
       })),
+      p_legal_name: override ? fLegal : null,
+      p_zip: override ? fZip : null,
+      p_regime: override ? fRegime : null,
+      p_cfdi_use: override ? fCfdi : null,
     })
     setSaving(false)
     if (error) {
@@ -98,84 +133,159 @@ export default function SaleScreen() {
       setCart([])
       setQuery('')
       setResults([])
+      setOverride(false)
     }
   }
 
   return (
-    <div className="max-w-5xl mx-auto p-4 grid md:grid-cols-2 gap-6">
+    <div className="grid gap-6 lg:grid-cols-5">
       {/* Search */}
-      <section>
-        <h2 className="font-bold mb-2">Search product</h2>
-        <input
-          className="border rounded w-full p-2"
-          placeholder="SKU or description"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
-        <ul className="mt-2 divide-y border rounded bg-white">
-          {results.map((p) => (
-            <li
-              key={p.uuid}
-              onClick={() => addToCart(p)}
-              className="p-2 cursor-pointer hover:bg-blue-50"
-            >
-              <div className="font-medium">{p.description}</div>
-              <div className="text-sm text-gray-500">
-                {p.sku} · SAT {p.sat_code} · ${p.suggested_price.toFixed(2)}
-              </div>
-            </li>
-          ))}
-        </ul>
+      <section className="lg:col-span-2">
+        <h2 className="mb-3 text-base font-semibold tracking-tight">Products</h2>
+        <div className="relative">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
+          <input
+            className="input pl-9"
+            placeholder="Search by SKU or description"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
+        {results.length > 0 && (
+          <ul className="card mt-2 divide-y divide-neutral-100 p-0">
+            {results.map((p) => (
+              <li
+                key={p.uuid}
+                onClick={() => addToCart(p)}
+                className="cursor-pointer px-4 py-3 transition hover:bg-neutral-50"
+              >
+                <div className="text-sm font-medium">{p.description}</div>
+                <div className="mt-0.5 text-xs text-neutral-500">
+                  {p.sku} · SAT {p.sat_code} · ${p.suggested_price.toFixed(2)}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       {/* Sale */}
-      <section>
-        <h2 className="font-bold mb-2">Sale</h2>
+      <section className="lg:col-span-3">
+        <h2 className="mb-3 text-base font-semibold tracking-tight">Sale</h2>
 
-        <div className="flex gap-2 mb-3">
-          <select
-            className="border rounded p-2 flex-1"
-            value={clientUuid}
-            onChange={(e) => setClientUuid(e.target.value)}
-          >
-            {clients.map((c) => (
-              <option key={c.uuid} value={c.uuid}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-          <select
-            className="border rounded p-2"
-            value={payment}
-            onChange={(e) => setPayment(e.target.value as PaymentMethod)}
-          >
-            {PAYMENT_METHODS.map((m) => (
-              <option key={m} value={m}>
-                {m}
-              </option>
-            ))}
-          </select>
+        <div className="mb-3 grid gap-3 sm:grid-cols-2">
+          <div>
+            <label className="label">Client</label>
+            <select
+              className="input"
+              value={clientUuid}
+              onChange={(e) => selectClient(e.target.value)}
+            >
+              {clients.map((c) => (
+                <option key={c.uuid} value={c.uuid}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="label">Payment method</label>
+            <select
+              className="input capitalize"
+              value={payment}
+              onChange={(e) => setPayment(e.target.value as PaymentMethod)}
+            >
+              {PAYMENT_METHODS.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
-        <table className="w-full text-sm bg-white border rounded">
-          <thead>
-            <tr className="text-left bg-gray-50">
-              <th className="p-2">Product</th>
-              <th className="p-2 w-20">Qty</th>
-              <th className="p-2 w-28">Price</th>
-              <th className="p-2 w-24 text-right">Subtotal</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {cart.map((i) => (
-              <tr key={i.product.uuid} className="border-t">
-                <td className="p-2">{i.product.description}</td>
-                <td className="p-2">
+        {/* Fiscal override */}
+        <div className="mb-3">
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-neutral-600">
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-neutral-900"
+              checked={override}
+              onChange={(e) => toggleOverride(e.target.checked)}
+            />
+            Edit fiscal data for this sale
+          </label>
+
+          {override && (
+            <div className="card mt-2 grid gap-3 sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <label className="label">Legal name</label>
+                <input className="input" value={fLegal} onChange={(e) => setFLegal(e.target.value)} />
+              </div>
+              <div>
+                <label className="label">Fiscal postal code</label>
+                <input
+                  className="input"
+                  maxLength={5}
+                  inputMode="numeric"
+                  value={fZip}
+                  onChange={(e) => setFZip(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="label">Tax regime</label>
+                <select className="input" value={fRegime} onChange={(e) => setFRegime(e.target.value)}>
+                  <option value="">Use company's</option>
+                  {REGIMES.map(([v, l]) => (
+                    <option key={v} value={v}>{l}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="sm:col-span-2">
+                <label className="label">CFDI use</label>
+                <select className="input" value={fCfdi} onChange={(e) => setFCfdi(e.target.value)}>
+                  <option value="">Use company's</option>
+                  {CFDI_USES.map(([v, l]) => (
+                    <option key={v} value={v}>{l}</option>
+                  ))}
+                </select>
+              </div>
+              <p className="text-xs text-neutral-400 sm:col-span-2">
+                Empty fields use the company's data. These values are saved on this sale only.
+              </p>
+            </div>
+          )}
+        </div>
+
+        <div className="card space-y-3">
+          {cart.length === 0 && (
+            <p className="py-6 text-center text-sm text-neutral-400">
+              Search and tap a product to add it
+            </p>
+          )}
+
+          {cart.map((i) => (
+            <div key={i.product.uuid} className="border-b border-neutral-100 pb-3 last:border-0 last:pb-0">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-sm font-medium">{i.product.description}</div>
+                  <div className="text-xs text-neutral-500">{i.product.sku}</div>
+                </div>
+                <button
+                  onClick={() => removeItem(i.product.uuid)}
+                  className="text-neutral-400 transition hover:text-red-600"
+                  aria-label="Remove"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+              <div className="mt-2 grid grid-cols-3 items-end gap-3">
+                <div>
+                  <label className="label">Qty</label>
                   <input
                     type="number"
                     min={1}
-                    className="border rounded w-full p-1"
+                    className="input"
                     value={i.quantity}
                     onChange={(e) =>
                       updateItem(i.product.uuid, {
@@ -183,13 +293,14 @@ export default function SaleScreen() {
                       })
                     }
                   />
-                </td>
-                <td className="p-2">
+                </div>
+                <div>
+                  <label className="label">Unit price</label>
                   <input
                     type="number"
                     min={0}
                     step="0.01"
-                    className="border rounded w-full p-1"
+                    className="input"
                     value={i.unit_price}
                     onChange={(e) =>
                       updateItem(i.product.uuid, {
@@ -197,34 +308,35 @@ export default function SaleScreen() {
                       })
                     }
                   />
-                </td>
-                <td className="p-2 text-right">
+                </div>
+                <div className="pb-2 text-right text-sm font-medium">
                   ${(i.unit_price * i.quantity).toFixed(2)}
-                </td>
-                <td className="p-2">
-                  <button
-                    onClick={() => removeItem(i.product.uuid)}
-                    className="text-red-600"
-                  >
-                    ✕
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
 
-        <div className="flex justify-between items-center mt-3">
-          <div className="text-lg font-bold">Total: ${previewTotal.toFixed(2)}</div>
+        <div className="mt-4 flex items-center justify-between">
+          <div>
+            <div className="text-xs text-neutral-500">Total</div>
+            <div className="text-2xl font-semibold tracking-tight">
+              ${previewTotal.toFixed(2)}
+            </div>
+          </div>
           <button
             onClick={saveSale}
             disabled={saving || cart.length === 0}
-            className="bg-green-600 text-white rounded px-4 py-2 disabled:opacity-50"
+            className="btn-primary px-6 py-3"
           >
             {saving ? 'Saving...' : 'Save sale'}
           </button>
         </div>
-        {message && <p className="mt-2 text-sm">{message}</p>}
+        {message && (
+          <p className={`text-sm mt-2 ${message.startsWith('Error') ? 'text-red-600' : 'text-green-700'}`}>
+            {message}
+          </p>
+        )}
       </section>
     </div>
   )

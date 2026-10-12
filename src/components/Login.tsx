@@ -14,27 +14,34 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
-      <form onSubmit={handleLogin} className="bg-white p-6 rounded shadow w-80 space-y-3">
-        <h1 className="text-xl font-bold">POS Login</h1>
-        <input
-          type="email"
-          placeholder="Email"
-          className="border rounded w-full p-2"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-        />
-        <input
-          type="password"
-          placeholder="Password"
-          className="border rounded w-full p-2"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-        />
-        {error && <p className="text-red-600 text-sm">{error}</p>}
-        <button className="bg-blue-600 text-white rounded w-full p-2">Sign in</button>
+    <div className="flex min-h-screen items-center justify-center p-4">
+      <form onSubmit={handleLogin} className="card w-full max-w-sm space-y-4 p-6">
+        <div>
+          <h1 className="text-lg font-semibold tracking-tight">Sign in</h1>
+          <p className="text-sm text-neutral-500">Internal POS</p>
+        </div>
+        <div>
+          <label className="label">Email</label>
+          <input
+            type="email"
+            className="input"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
+        </div>
+        <div>
+          <label className="label">Password</label>
+          <input
+            type="password"
+            className="input"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
+        </div>
+        {error && <p className="text-sm text-red-600">{error}</p>}
+        <button className="btn-primary w-full">Sign in</button>
       </form>
     </div>
   )
